@@ -3,6 +3,7 @@
 Script to generate and manage CircuitPython stubs.
 Handles repository cloning, stub generation, and virtual environment management.
 """
+from __future__ import annotations  
 import argparse
 import logging
 import os
@@ -13,15 +14,15 @@ from pathlib import Path
 from typing import Optional, TypeVar, Callable, Any,ClassVar, TypedDict
 
 # Configuration
+#def configOption
 #CIRCUITPYTHON_VERSION = "9.2.8"
-CIRCUITPYTHON_VERSION = "10.0.0-beta.2"
-DEBUG = True or os.getenv("DEBUG", "false").lower() == "true"
+class StubsConfig:
+    PYTHON_COMMAND="python3.11" 
+    CIRCUITPYTHON_VERSION = "10.0.0-beta.2"
+    DEBUG:bool = True
+    #CIRCUITPYTHON_REPO_URL = "https://github.com/adafruit/circuitpython.git"
+    CIRCUITPYTHON_REPO_URL = "https://github.com/jbrel/circuitpython.git"
 
-# Setup logging
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 
 
 def safe_rmtree(path: Path) -> None:
@@ -36,10 +37,14 @@ def safe_rmtree(path: Path) -> None:
     except OSError as e:
         logging.error(f"Error removing {path}: {e}")
 
-class StubEntry(TypedDict):
-    method: Callable[..., Any]
-    inCP: bool
-    unique: bool
+class StubEntry:
+    def __init__(self, method: Callable[..., Any], inCP: bool = True, unique: bool = False):
+        self.method = method
+        self.inCP = inCP
+        self.unique = unique
+        
+    targets:ClassVar[dict[str,StubEntry]] = {}
+    targetsInOrder:ClassVar[list[StubEntry]] = []
 
     def __call__( self, generator: 'StubGenerator') -> None:
         if self.inCP:
@@ -53,25 +58,23 @@ class StubEntry(TypedDict):
 
 def stubTarget( inCP:bool = True, unique:bool=False  ) :
     def decorate( func: Callable[..., Any] ) -> Callable[..., Any]:
-        entry = { 'method':func, 'inCP':inCP, 'unique':unique }
-        StubGenerator.targets[func.__name__] = entry
+        entry = StubEntry(func, inCP, unique)
+        StubEntry.targets[func.__name__] = entry
         if not unique:
-            StubGenerator.targetsInOrder.append(entry)
+            StubEntry.targetsInOrder.append(entry)
         return func
     return decorate
 
 class StubGenerator:
-    targets:ClassVar[dict[str,StubEntry]] = {}
-    targetsInOrder:ClassVar[list[StubEntry]] = []
-    
-    def __init__(self, version: str):
+
+    def __init__(self):
         """
         Main function to handle stub generation and management.
         
         Args:
             version: CircuitPython version to checkout
         """
-        self.version = version
+        self.version = StubsConfig.CIRCUITPYTHON_VERSION
 
         # Setup paths
         self.script_dir = Path(__file__).parent.absolute()
@@ -90,21 +93,21 @@ class StubGenerator:
             os.chdir(self.circuitpython_dir)        
 
     def build(self, target: str) -> None:
-        if target not in self.targets:
+        if target not in StubEntry.targets:
             logging.error(f"Unknown target: {target}")
             sys.exit(1)
-        self.targets[target](self)
+        StubEntry.targets[target](self)
 
     @stubTarget( unique=True )
     def all(self):
-        for target in self.targetsInOrder:
+        for target in StubEntry.targetsInOrder:
             target(self)
 
     @stubTarget( inCP=False)
     def cloneRepo(self): # Clone repository if it doesn't exist
         if not self.circuitpython_dir.exists():
             os.chdir(self.repo_root)
-            self.run_command(f"git clone https://github.com/adafruit/circuitpython.git {self.circuitpython_dir}")
+            self.run_command(f"git clone {StubsConfig.CIRCUITPYTHON_REPO_URL} {self.circuitpython_dir}")
             os.chdir(self.circuitpython_dir)
             
         # Change to circuitpython directory
@@ -118,7 +121,7 @@ class StubGenerator:
     def setupVenv(self):
         # Setup virtual environment
         if not os.path.exists(self.venv_dir):
-            self.run_command(f"python3 -m venv {self.venv_dir}")
+            self.run_command(f"{StubsConfig.PYTHON_COMMAND} -m venv {self.venv_dir}")
 
         # Activate virtual environment (Python way)
         assert os.path.exists(self.venv_dir), f"Virtual environment directory {self.venv_dir} does not exist."
@@ -129,7 +132,7 @@ class StubGenerator:
         self.run_pip(f"install --upgrade pip wheel")
         self.run_pip(f"install bs4")
         self.run_pip(f"install -r requirements-doc.txt")
-        self.run_pip(f"install -r requirements-doc.txt")
+        self.run_pip(f"install -r requirements-dev.txt")
         self.run_pip(f"install -r {self.circuitpython_dir}/requirements-doc.txt")
 
     @stubTarget()
@@ -205,15 +208,35 @@ class StubGenerator:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate and manage CircuitPython stubs.")
     parser.add_argument("target", default="all",
-                        choices=StubGenerator.targets.keys(),
+                        choices=StubEntry.targets.keys(),
                         help=f"stub step (all builds everything except clean in order)")
 
     parser.add_argument("--version", default=CIRCUITPYTHON_VERSION,
                         help=f"CircuitPython version to checkout (default: {CIRCUITPYTHON_VERSION})")
-    
-    
+
+    for tag,val in StubsConfig.__dict__.items():
+        # update default from environment variables
+        envVal = os.getenv(tag, None)
+        if envVal is not None:
+            setattr(StubsConfig, tag, type(val)(envVal))
+            
+        if isinstance(val,bool):
+            parser.add_argument(f"--{tag.lower()}", action='store_true', default=val,)
+        else:
+            assert isinstance(val, str), f"Unexpected type {type(val)} for {tag}"
+            parser.add_argument(f"--{tag.lower()}", default=val)
+
     args = parser.parse_args()
-    generator = StubGenerator(args.version)
+    for tag,val in StubsConfig.__dict__.items():
+        setattr( StubsConfig, tag, getattr(args, tag.lower()) )
+        
+    # Setup logging
+    logging.basicConfig(
+        level=logging.DEBUG if StopIteration.DEBUG else logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+
+    generator = StubGenerator()
     generator.build(args.target)
 
 # vim: set ts=4 sw=4 tw
