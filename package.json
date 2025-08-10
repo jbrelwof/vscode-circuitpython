@@ -1,17 +1,17 @@
 {
-  "name": "vscode-circuitpython-v2",
-  "displayName": "CircuitPython v2",
+  "name": "vscode-circuitpython-v2-jbf",
+  "displayName": "CircuitPython v2-jbf",
   "description": "CircuitPython for Visual Studio Code",
-  "version": "0.3.4",
-  "publisher": "wmerkens",
+  "version": "0.3.5",
+  "publisher": "jbrelwof",
   "license": "MIT",
-  "qna": "https://github.com/wmerkens/vscode-circuitpython/discussions",
+  "qna": "https://github.com/jbrelwof/vscode-circuitpython/discussions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wmerkens/vscode-circuitpython.git"
+    "url": "https://github.com/jbrelwof/vscode-circuitpython.git"
   },
   "bugs": {
-    "url": "https://github.com/wmerkens/vscode-circuitpython/issues"
+    "url": "https://github.com/jbrelwof/vscode-circuitpython/issues"
   },
   "engines": {
     "vscode": "^1.101.0"
@@ -52,6 +52,11 @@
         "command": "circuitpython.closeSerialMonitor",
         "title": "CircuitPython: Close Serial Monitor"
       },
+      {
+        "command": "circuitpython.clearSerialMonitor",
+        "title": "CircuitPython: Clear Serial Monitor"
+      },
+      
       {
         "command": "circuitpython.sendMessageToSerialPort",
         "title": "CircuitPython: Send Text to Serial Port"
@@ -123,7 +128,16 @@
         "key": "ctrl+alt+r",
         "mac": "cmd+alt+r"
       }
-    ]
+    ],
+    "menus": {
+            "terminal/context": [
+                {
+                    "command": "circuitpython.clearSerialMonitor",
+                    "group": "5_clear",
+                    "when": "terminalFocus" 
+                }
+            ]
+        }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
