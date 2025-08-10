@@ -4,23 +4,33 @@
 find-native:
 	@find node_modules -type f -name "*.node" 2>/dev/null | grep -v "obj\.target"
 
-built.npm: package.json
+
+
+BUILD_STUBS=python ./scripts/build-stubs.py
+
+built.checkVersions: 
+	$(BUILD_STUBS) checkVersions
+	touch built.checkVersions
+
+built.npm: package.json built.checkVersions
 	@echo "Installing npm dependencies..."
 	npm install
+
 	touch built.npm
+
 
 built.electron: package.json built.npm
 	@npm run electron-rebuild
 	touch built.electron
 
-BUILD_STUBS=python ./scripts/build-stubs.py
 
-built.cpRepo: 
+built.cpRepo: built.electron
 	$(BUILD_STUBS) cloneRepo
 	touch built.cpRepo
 
 #circuitpython/setup.py-stubs: circuitpython/setup.py-stubs#
 #	@./scripts/build-stubs.py cloneRepo
+
 
 built.venv: built.cpRepo circuitpython/setup.py-stubs
 	$(BUILD_STUBS) setupVenv
@@ -40,17 +50,17 @@ built.stubs: built.cpStubs circuitpython/circuitpython-stubs/setup.py
 
 built.boards: built.stubs stubs/setup.py
 	@echo "Building stubs..."
-	@$(BUILD_STUBS) makeBoards
+	@$(BUILD_STUBS) buildBoards
 	touch built.boards
 # boards/metadata.json
 
-vsix: built.boards
+built.vsix: built.boards built.electron
 	@echo "Packaging VS Code extension..."
 	@npx @vscode/vsce package
+	touch built.vsix
 
 
-
-all: vsix # built.npm built.electron built.cpRepo built.venv built.cpStubs built.stubs built.boards
+all: built.vsix # built.npm built.electron built.cpRepo built.venv built.cpStubs built.stubs built.boards
 	@echo "All build steps complete."
 
 # Main target to build everything for release

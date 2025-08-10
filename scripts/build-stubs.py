@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import re
 from pathlib import Path
 from typing import Optional, TypeVar, Callable, Any,ClassVar, TypedDict
 
@@ -21,7 +22,7 @@ class StubsConfig:
     CIRCUITPYTHON_VERSION = "10.0.0-beta.2"
     DEBUG:bool = True
     #CIRCUITPYTHON_REPO_URL = "https://github.com/adafruit/circuitpython.git"
-    CIRCUITPYTHON_REPO_URL = "https://github.com/jbrel/circuitpython.git"
+    CIRCUITPYTHON_REPO_URL = "https://github.com/jbrelwof/circuitpython.git"
 
 
 
@@ -104,6 +105,31 @@ class StubGenerator:
             target(self)
 
     @stubTarget( inCP=False)
+    def checkVersions(self):
+        print("CHECKING VERSIONS...")
+        versionRegx = re.compile(r"^(?:\w+\s+)?(?:v)?(\d+)\.(\d+)\.(\d+)$")
+        def extractVersion( version:str) -> tuple[int, int, int]:
+            match = versionRegx.match(version)
+            if not match:
+                raise ValueError(f"Invalid version string: {version}")
+            return tuple(map(int, match.groups()))  
+        
+        def checkVersion( cmd, minVersion:str|type[tuple[int, int, int]]):
+            if isinstance(minVersion, str): 
+                minVersion = extractVersion(minVersion)
+            version = self.run_command(cmd,capture_output=True).stdout.strip()
+            print(f"version ({type(version)}) = {repr(version)}")
+            current = extractVersion(version)
+            if current < minVersion:
+                logging.error(f"Version check failed: {cmd} {current} < {minVersion}")
+                sys.exit(1)
+
+        checkVersion(StubsConfig.PYTHON_COMMAND + " --version", "3.11.0")
+        checkVersion("node --version", "22.18.0")
+        checkVersion("npm --version", "10.9.3")
+
+
+    @stubTarget( inCP=False)
     def cloneRepo(self): # Clone repository if it doesn't exist
         if not self.circuitpython_dir.exists():
             os.chdir(self.repo_root)
@@ -183,12 +209,12 @@ class StubGenerator:
             self.venv_python = self.venv_dir / "scripts" / "python"
 
     def run_pip(self, cmd ):
-        self.run_command( f"{self.venv_pip} {cmd}" )
+        return self.run_command( f"{self.venv_pip} {cmd}" )
 
     def run_python(self, cmd):
-        self.run_command(f"{self.venv_python} {cmd}")
-        
-    def run_command(self, cmd: str, cwd: Optional[Path] = None) -> None:
+        return self.run_command(f"{self.venv_python} {cmd}")
+
+    def run_command(self, cmd: str, cwd: Optional[Path] = None, capture_output: bool = False) -> subprocess.CompletedProcess:
         """
         Execute a shell command and handle errors.
         
@@ -200,7 +226,7 @@ class StubGenerator:
         """
         logging.debug(f"Executing: {cmd} in {cwd or 'current directory'}")
         try:
-            subprocess.run(cmd, cwd=cwd, check=True, shell=True)
+            return subprocess.run(cmd, cwd=cwd, check=True, shell=True,capture_output=capture_output,text=True,  )
         except subprocess.CalledProcessError as e:
             logging.error(f"Error executing {cmd}: {e}")
             sys.exit(1)
@@ -211,11 +237,12 @@ if __name__ == "__main__":
                         choices=StubEntry.targets.keys(),
                         help=f"stub step (all builds everything except clean in order)")
 
-    parser.add_argument("--version", default=CIRCUITPYTHON_VERSION,
-                        help=f"CircuitPython version to checkout (default: {CIRCUITPYTHON_VERSION})")
 
+    # update default from environment variables
     for tag,val in StubsConfig.__dict__.items():
-        # update default from environment variables
+        if tag.startswith("_") :
+            continue
+
         envVal = os.getenv(tag, None)
         if envVal is not None:
             setattr(StubsConfig, tag, type(val)(envVal))
@@ -228,11 +255,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     for tag,val in StubsConfig.__dict__.items():
+        if tag.startswith("_") :
+            continue
         setattr( StubsConfig, tag, getattr(args, tag.lower()) )
         
     # Setup logging
     logging.basicConfig(
-        level=logging.DEBUG if StopIteration.DEBUG else logging.INFO,
+        level=logging.DEBUG if StubsConfig.DEBUG else logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
