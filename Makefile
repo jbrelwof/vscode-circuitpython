@@ -4,8 +4,41 @@
 find-native:
 	@find node_modules -type f -name "*.node" 2>/dev/null | grep -v "obj\.target"
 
+built/npm.built: packages.json
+	@echo "Installing npm dependencies..."
+	npm install
+
+built/electron.built: packages.json built/npm.built
+	@npm run electron-rebuild
+	touch built/electron.built
+
+
+
+circuitpython/setup.py-stubs:
+	@./scripts/build-stubs.py cloneRepo
+
+circuitpython/.venv: circuitpython/setup.py-stubs:
+	@echo "Building stubs..."
+	@./scripts/build-stubs.py setupVenv
+
+circuitpython/circuitpython-stubs/setup.py: circuitpython/.venv
+	@echo "Building stubs..."
+	@./scripts/build-stubs.py makeStubs
+
+stubs/setup.py: circuitpython/circuitpython-stubs/setup.py
+	@echo "Copying stubs..."
+	@./scripts/build-stubs.py copyStubs
+
+
+boards/metadata.json: stubs/setup.py
+	@echo "Building stubs..."
+	@./scripts/build-stubs.py makeBoards
+
+	
+
+
 # Main target to build everything for release
-all: install-deps
+oldall: install-deps
 	@echo "Running electron-rebuild..."
 	@npm run electron-rebuild
 	@echo "Building stubs..."
